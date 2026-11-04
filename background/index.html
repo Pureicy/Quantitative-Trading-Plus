@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>粒子背景 · Particle Background</title>
+    <style>
+      /* ------------------------------------------------------------------
+         Layering contract
+         z-index 0 : canvas (the particle field) — fixed, full viewport
+         z-index 1 : UI container — sits above the canvas
+         The canvas never swallows UI clicks: the UI layer owns the pointer,
+         and the canvas only reacts to events that reach it.
+      ------------------------------------------------------------------ */
+      :root {
+        --bg-deep: #05070f;
+        --surface: rgba(18, 22, 38, 0.72);
+        --border: rgba(140, 160, 255, 0.18);
+        --text: #eef1ff;
+        --text-muted: #9aa3c4;
+        --accent: #8a5cff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: var(--bg-deep);
+        color: var(--text);
+        font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui,
+          sans-serif;
+        overflow: hidden;
+      }
+
+      /* Layer 0 — the particle canvas */
+      #particle-canvas {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        z-index: 0;
+        pointer-events: auto;
+      }
+
+      /* Layer 1 — the UI container (transparent so the particles stay visible) */
+      .ui-layer {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 24px;
+        pointer-events: none; /* the container itself must not eat clicks */
+      }
+
+      .ui-layer > * {
+        pointer-events: auto;
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+        padding: 16px 18px;
+      }
+
+      .panel h1 {
+        margin: 0 0 4px;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+      }
+
+      .panel p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .controls label {
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      select,
+      button {
+        font: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 7px 10px;
+        outline: none;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      .switch {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .switch input {
+        appearance: none;
+        width: 38px;
+        height: 21px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        position: relative;
+        cursor: pointer;
+        transition: background 160ms ease-out;
+        margin: 0;
+      }
+
+      .switch input::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 160ms ease-out;
+      }
+
+      .switch input:checked {
+        background: var(--accent);
+      }
+
+      .switch input:checked::after {
+        transform: translateX(17px);
+      }
+
+      .hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        opacity: 0.85;
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 32px;
+        transform: translate(-50%, 20px);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 18px;
+        font-size: 13px;
+        opacity: 0;
+        transition: opacity 180ms ease-out, transform 180ms ease-out;
+        pointer-events: none;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      /* The control strip is only shown in standalone website mode. */
+      .ui-layer[data-controls="off"] .panel.controls-panel {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ui-layer" id="ui-layer" data-controls="off">
+      <div class="panel controls-panel">
+        <h1>粒子背景</h1>
+        <p>Three.js / BufferGeometry + PointsMaterial · 冷色系星云</p>
+        <div class="controls">
+          <label>
+            粒子数量
+            <select id="count-select">
+              <option value="1000">1000</option>
+              <option value="2000">2000</option>
+              <option value="4000" selected>4000</option>
+              <option value="8000">8000</option>
+            </select>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="quality-toggle" />
+            省电模式
+          </label>
+          <button id="dispose-button" type="button">重建粒子系统</button>
+          <span class="hint">点击画面中央的核心组件可触发选中事件</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">选中了 3D 核心组件</div>
+
+    <script type="module">
+      import {
+        initParticles,
+        disposeParticles,
+        animate,
+        start,
+        setCount,
+        setQuality,
+        onSelect,
+        getState,
+      } from './particles.js';
+
+      const params = new URLSearchParams(location.search);
+      const uiLayer = document.getElementById('ui-layer');
+      const countSelect = document.getElementById('count-select');
+      const qualityToggle = document.getElementById('quality-toggle');
+      const disposeButton = document.getElementById('dispose-button');
+      const toast = document.getElementById('toast');
+
+      // Website mode shows the control strip; the desktop app drives the scene
+      // through the local config endpoint and keeps the DOM clean.
+      if (params.get('controls') === '1') {
+        uiLayer.dataset.controls = 'on';
+      }
+
+      let toastTimer = 0;
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2200);
+      }
+
+      onSelect((payload) => {
+        showToast('选中了 3D 核心组件');
+        // eslint-disable-next-line no-console
+        console.log('core-selected', payload);
+      });
+
+      countSelect.addEventListener('change', (event) => {
+        setCount(Number(event.target.value));
+      });
+
+      qualityToggle.addEventListener('change', (event) => {
+        setQuality(event.target.checked ? 'power' : 'performance');
+      });
+
+      disposeButton.addEventListener('click', () => {
+        const current = getState().count;
+        disposeParticles();
+        initParticles(current);
+      });
+
+      // Keep the control strip in sync when the host changes the config.
+      window.setInterval(async () => {
+        try {
+          const response = await fetch('/api/config', { cache: 'no-store' });
+          if (!response.ok) return;
+          const config = await response.json();
+          if (config.count && String(config.count) !== countSelect.value) {
+            countSelect.value = String(config.count);
+            setCount(config.count);
+          }
+          if (config.quality) {
+            const wantPower = config.quality === 'power';
+            if (qualityToggle.checked !== wantPower) {
+              qualityToggle.checked = wantPower;
+              setQuality(config.quality);
+            }
+          }
+        } catch (err) {
+          /* standalone page without a config endpoint */
+        }
+      }, 2000);
+
+      window.ParticleUI = { showToast, setCount, setQuality, start, animate };
+    </script>
+  </body>
+</html>

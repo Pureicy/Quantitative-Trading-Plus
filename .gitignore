@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+.venv_web/
+venv/
+env/
+ENV/
+
+# Local temp (used by DSH harness)
+.tmp/
+
+# Environment / secrets
+.env
+.env.*
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Generated scan / backup artifacts (local only)
+data/backups/
+data/snapshots/
+exports/

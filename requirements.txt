@@ -1,0 +1,4 @@
+flet
+flet-desktop
+pandas
+akshare
